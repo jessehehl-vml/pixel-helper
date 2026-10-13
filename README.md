@@ -23,7 +23,7 @@ The header has a **Source** selector for where values come from. The right side 
 | dataLayer | Browse `window.dataLayer` (or any global name you type) as a tree, search keys and values, and click a value to turn it into a scrape expression.                                                                                                         |
 | DOM       | Search the page by text or attribute value, or use **Select on page** to click an element. Choose a selector from the suggestions, pick what to read (text or an attribute), and preview the value. The matched elements get a green outline on the page. |
 | URL       | Split the page URL into parts (host, path segments, query parameters, hash), optionally split a part on a separator or apply a regex, and join several parts.                                                                                             |
-| Window    | Search all custom `window` globals by key or value (for sites without a `dataLayer`), or open a global as the data layer to browse it.                                                                                                                    |
+| Window    | Same tree and search as dataLayer, but for all custom `window` globals (for sites without a `dataLayer`). Likely data layers (`digitalData`, `utag_data`, …) are listed first. It is a snapshot taken when you switch to Window or press **Refresh**, not a live view. |
 
 Expressions are generated for the selected pixel type: scalar values for scraper fields, and `.map(...)` over arrays for `viewed`, `basketed` and `purchased` SKUs.
 
@@ -116,7 +116,7 @@ cp package/dist/bundle.iife.min.js lib/choreograph-create-pixel.iife.min.js
 ## Limitations
 
 - Elements inside iframes cannot be picked or searched.
-- Window search covers custom properties of `window` (not `let` or `const` variables), up to 100 results, 7 levels deep.
+- The Window snapshot covers custom properties of `window` (not `let` or `const` variables), up to 6 levels deep, 20,000 objects, 200 keys per object and 100 array items. Functions and DOM nodes are skipped, and long strings are cut at 200 characters.
 - The DOM listing sent to Copilot is capped (about 6,000 characters, 12,000 on a retry). The page must be showing the data when you press Build.
 - Without a quoted label in your request, the trigger check can only confirm that the selector matches something.
 - Chrome only, loaded unpacked.

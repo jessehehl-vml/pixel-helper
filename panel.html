@@ -15,7 +15,7 @@
           <option value="window">Window</option>
         </select>
       </label>
-      <label class="dl"
+      <label class="dl-only"
         >Data layer <input id="layer" value="dataLayer" size="14"
       /></label>
       <input id="search" class="dl" placeholder="Search keys / values" />
@@ -84,21 +84,6 @@
         <div id="url-preview" class="mono"></div>
         <button id="url-add">Use value</button>
         <div id="url-status" class="hint"></div>
-      </section>
-
-      <section id="window-pane" class="hidden">
-        <p class="hint">
-          Search the page's custom global variables (window) by key or value,
-          for example a SKU or "price".
-        </p>
-        <input id="window-search" placeholder="Search keys or values" />
-        <div id="window-status" class="hint"></div>
-        <div id="window-results"></div>
-        <h3>
-          Custom globals <button id="window-rescan" class="link">Rescan</button>
-        </h3>
-        <p class="hint">Click one to browse it as the data layer.</p>
-        <div id="window-globals"></div>
       </section>
 
       <section id="config-pane">

@@ -27,6 +27,7 @@ const state = {
   open: new Set(),
   rows: [],
   urlItems: [],
+  windowData: {},
   urlEdited: false,
 };
 
@@ -65,6 +66,11 @@ function buildExpr(path, allowMap) {
   return expr;
 }
 
+// In Window mode the status line belongs to the window snapshot.
+const setStatus = (text) => {
+  if ($("source").value !== "window") $("status").textContent = text;
+};
+
 function readPage() {
   const name = JSON.stringify(layerName());
   const code = `(() => {
@@ -84,25 +90,25 @@ function readPage() {
 
   chrome.devtools.inspectedWindow.eval(code, (raw, exception) => {
     if (exception || typeof raw !== "string") {
-      $("status").textContent = "Cannot read page";
+      setStatus("Cannot read page");
       return;
     }
     if (raw === state.raw) return;
     state.raw = raw;
     const data = JSON.parse(raw);
     if (data.error) {
-      $("status").textContent = data.error;
+      setStatus(data.error);
       return;
     }
     if (data.layer === null) {
-      $("status").textContent = `window.${layerName()} not found`;
+      setStatus(`window.${layerName()} not found`);
       state.layer = [];
     } else {
       state.isArray = Array.isArray(data.layer);
       state.layer = data.layer;
-      $("status").textContent = state.isArray
-        ? `${data.layer.length} entries`
-        : "object";
+      setStatus(
+        state.isArray ? `${data.layer.length} entries` : "object",
+      );
     }
     if (data.url !== state.pageUrl) {
       state.pageUrl = data.url;
@@ -263,10 +269,12 @@ function renderTree() {
   const tree = $("tree");
   tree.replaceChildren();
   const query = $("search").value.trim().toLowerCase();
+  const windowMode = $("source").value === "window";
+  const data = windowMode ? state.windowData : state.layer;
 
   if (query) {
     const leaves = [];
-    flatten(state.layer, [], leaves);
+    flatten(data, [], leaves);
     leaves
       .filter(({ path, value }) =>
         `${path.join(".")} ${value}`.toLowerCase().includes(query),
@@ -278,9 +286,14 @@ function renderTree() {
     return;
   }
 
-  if (!state.isArray) {
-    for (const [k, v] of Object.entries(state.layer))
-      tree.append(renderNode(v, [k], k));
+  if (windowMode || !state.isArray) {
+    const entries = Object.entries(data);
+    // Globals that look like data layers go first.
+    if (windowMode)
+      entries.sort(
+        ([a], [b]) => LIKELY_DATA.test(b) - LIKELY_DATA.test(a) || a.localeCompare(b),
+      );
+    for (const [k, v] of entries) tree.append(renderNode(v, [k], k));
     return;
   }
   state.layer.forEach((entry, i) => {
@@ -292,9 +305,16 @@ function renderTree() {
   });
 }
 
+const LIKELY_DATA =
+  /data|layer|digital|utag|tealium|track|analytics|product|page|user|store|config|state/i;
+
 function pick(path) {
   const name = [...path].reverse().find((k) => typeof k === "string") ?? "";
-  applyExpr(buildExpr(path, isSegment()), name);
+  const expr =
+    $("source").value === "window"
+      ? windowExpr(path, isSegment())
+      : buildExpr(path, isSegment());
+  applyExpr(expr, name);
 }
 
 function applyExpr(expr, name) {
@@ -1460,8 +1480,8 @@ async function copyPrompt() {
   $("ai-status").textContent = "Prompt copied to the clipboard.";
 }
 
-// Runs in the inspected page: custom globals (absent from a blank iframe's window) and a deep key/value search.
-function pageWindow(query) {
+// Runs in the inspected page: a trimmed copy of the custom globals (those a blank iframe's window lacks).
+function pageWindowSnapshot() {
   const frame = document.createElement("iframe");
   frame.style.display = "none";
   document.documentElement.append(frame);
@@ -1470,124 +1490,61 @@ function pageWindow(query) {
   );
   frame.remove();
 
-  const names = Object.getOwnPropertyNames(window).filter(
-    (n) => !native.has(n) && !/^__pixelHelper|^\d+$/.test(n),
-  );
-  const likely =
-    /data|layer|digital|utag|tealium|track|analytics|product|page|user|store|config|state/i;
   const isNode = (v) =>
     v instanceof Node ||
     v === window ||
     v.window === v ||
     ArrayBuffer.isView(v);
-
-  const globals = [];
-  for (const name of names) {
-    let v;
+  const ancestors = new WeakSet();
+  let nodes = 0;
+  const copy = (value, depth) => {
+    if (value === null) return null;
+    const type = typeof value;
+    if (type === "function" || type === "symbol" || type === "undefined")
+      return undefined;
+    if (type === "string") return value.slice(0, 200);
+    if (type !== "object") return value;
+    if (isNode(value) || ancestors.has(value) || depth > 6 || nodes++ > 20000)
+      return undefined;
+    const isArray = Array.isArray(value);
+    let keys;
     try {
-      v = window[name];
+      keys = Object.keys(value).slice(0, isArray ? 100 : 200);
     } catch (e) {
-      continue;
+      return undefined;
     }
-    if (v === null || typeof v !== "object" || isNode(v)) continue;
-    globals.push({
-      name,
-      kind: Array.isArray(v)
-        ? "Array(" + v.length + ")"
-        : "Object(" + Object.keys(v).length + ")",
-    });
-  }
-  globals.sort(
-    (a, b) =>
-      likely.test(b.name) - likely.test(a.name) || a.name.localeCompare(b.name),
-  );
-
-  const results = [];
-  if (query) {
-    const q = query.toLowerCase();
-    const seen = new WeakSet();
-    let visited = 0;
-    const walk = (value, path) => {
-      if (results.length >= 100 || visited > 30000 || value == null) return;
-      const t = typeof value;
-      if (t === "function" || t === "symbol") return;
-      if (t !== "object") {
-        if (String(value).toLowerCase().includes(q))
-          results.push({
-            path,
-            where: "value",
-            value: String(value).slice(0, 100),
-          });
-        return;
-      }
-      if (isNode(value) || seen.has(value) || path.length > 7) return;
-      seen.add(value);
-      visited++;
-      let keys;
+    ancestors.add(value);
+    const out = isArray ? [] : {};
+    for (const key of keys) {
+      let child;
       try {
-        keys = Object.keys(value);
-      } catch (e) {
-        return;
-      }
-      const isArray = Array.isArray(value);
-      for (const key of keys.slice(0, 200)) {
-        let child;
-        try {
-          child = value[key];
-        } catch (e) {
-          continue;
-        }
-        consider(
-          child,
-          path.concat(isArray ? Number(key) : key),
-          isArray ? null : key,
-        );
-      }
-    };
-    const consider = (child, path, key) => {
-      const isPrimitive = (v) =>
-        v !== null && typeof v !== "object" && typeof v !== "function";
-      if (key && key.toLowerCase().includes(q)) {
-        if (isPrimitive(child)) {
-          results.push({
-            path,
-            where: "key",
-            value: String(child).slice(0, 100),
-          });
-          return;
-        }
-        if (Array.isArray(child) && child.length && isPrimitive(child[0])) {
-          results.push({
-            path: path.concat(0),
-            where: "key",
-            value: String(child[0]).slice(0, 100),
-          });
-          return;
-        }
-      }
-      walk(child, path);
-    };
-    for (const name of names) {
-      let v;
-      try {
-        v = window[name];
+        child = value[key];
       } catch (e) {
         continue;
       }
-      consider(v, [name], name);
+      const c = copy(child, depth + 1);
+      // Array slots stay aligned so index paths remain correct.
+      if (isArray) out.push(c === undefined ? null : c);
+      else if (c !== undefined) out[key] = c;
     }
-  }
-  return {
-    globals: globals.slice(0, 150),
-    results,
-    truncated: results.length >= 100,
+    ancestors.delete(value);
+    return out;
   };
-}
 
-const formatPath = (path) =>
-  path
-    .map((k, i) => (typeof k === "number" ? `[${k}]` : i ? `.${k}` : k))
-    .join("");
+  const result = {};
+  for (const name of Object.getOwnPropertyNames(window)) {
+    if (native.has(name) || /^__pixelHelper|^\d+$/.test(name)) continue;
+    let value;
+    try {
+      value = window[name];
+    } catch (e) {
+      continue;
+    }
+    const c = copy(value, 0);
+    if (c !== undefined) result[name] = c;
+  }
+  return JSON.stringify(result);
+}
 
 function windowExpr(path, allowMap) {
   const [name, ...rest] = path;
@@ -1602,73 +1559,21 @@ function windowExpr(path, allowMap) {
   return expr;
 }
 
-function refreshWindow() {
-  const query = $("window-search").value.trim();
-  const code = `JSON.stringify((${pageWindow})(${JSON.stringify(query.length >= 2 ? query : "")}))`;
-  chrome.devtools.inspectedWindow.eval(code, (result, exception) => {
-    if (exception || typeof result !== "string") {
-      $("window-status").textContent = "Cannot read the page";
-      return;
-    }
-    const data = JSON.parse(result);
-    renderWindowGlobals(data.globals);
-    renderWindowResults(query, data);
-  });
-}
-
-function renderWindowGlobals(globals) {
-  const box = $("window-globals");
-  box.replaceChildren();
-  if (!globals.length)
-    box.append(el("div", "hint", "No custom object globals found."));
-  for (const { name, kind } of globals) {
-    const row = el("button", "cand");
-    row.append(
-      el("span", "cand-sel mono", name),
-      el("span", "cand-count", kind),
-    );
-    row.addEventListener("click", () => {
-      $("layer").value = name;
-      $("source").value = "datalayer";
-      syncSource();
-      state.raw = "";
-      readPage();
-    });
-    box.append(row);
-  }
-}
-
-function renderWindowResults(query, data) {
-  const box = $("window-results");
-  box.replaceChildren();
-  if (query.length < 2) return;
-  const { results, truncated } = data;
-  box.append(
-    el(
-      "div",
-      "hint",
-      results.length
-        ? `${results.length}${truncated ? "+" : ""} match(es). Click one to use it:`
-        : "No matches",
-    ),
+function refreshWindowTree() {
+  const status = $("status");
+  status.textContent = "Reading window...";
+  chrome.devtools.inspectedWindow.eval(
+    `(${pageWindowSnapshot})()`,
+    (result, exception) => {
+      if (exception || typeof result !== "string") {
+        status.textContent = "Cannot read window";
+        return;
+      }
+      state.windowData = JSON.parse(result);
+      status.textContent = `${Object.keys(state.windowData).length} globals`;
+      renderTree();
+    },
   );
-  for (const hit of results) {
-    const row = el("button", "hit");
-    const head = el("div", "hit-head");
-    head.append(
-      el("span", "cand-sel mono", formatPath(hit.path)),
-      el("span", "cand-count", hit.where),
-    );
-    row.append(head, el("div", "hit-snippet", hit.value));
-    row.addEventListener("click", () => {
-      applyExpr(
-        windowExpr(hit.path, isSegment()),
-        [...hit.path].reverse().find((k) => typeof k === "string") ?? "",
-      );
-      $("window-status").textContent = appliedMessage();
-    });
-    box.append(row);
-  }
 }
 
 function urlParts(href) {
@@ -1899,19 +1804,30 @@ function addUrlValue() {
 
 function syncSource() {
   const source = $("source").value;
-  $("tree-pane").classList.toggle("hidden", source !== "datalayer");
+  const treeSource = source === "datalayer" || source === "window";
+  $("tree-pane").classList.toggle("hidden", !treeSource);
   $("dom-pane").classList.toggle("hidden", source !== "dom");
   $("url-pane").classList.toggle("hidden", source !== "url");
-  $("window-pane").classList.toggle("hidden", source !== "window");
   for (const node of document.querySelectorAll(".dl"))
+    node.classList.toggle("hidden", !treeSource);
+  for (const node of document.querySelectorAll(".dl-only"))
     node.classList.toggle("hidden", source !== "datalayer");
   $("sku").placeholder = {
     datalayer: "Click a value in the tree",
     dom: "Use the DOM picker on the left",
     url: "Use the URL builder on the left",
-    window: "Use the window search on the left",
+    window: "Click a value in the tree",
   }[source];
-  if (source === "window") refreshWindow();
+  state.open.clear();
+  if (source === "window") {
+    renderTree();
+    refreshWindowTree();
+  } else if (source === "datalayer") {
+    renderTree();
+    $("status").textContent = state.isArray
+      ? `${state.layer.length} entries`
+      : "object";
+  }
   if (source === "url") {
     renderUrlParts();
     renderUrlItems();
@@ -2137,12 +2053,6 @@ $("select-dom").addEventListener("click", () =>
 $("source").addEventListener("change", syncSource);
 $("url-sep").addEventListener("input", updateUrlPreview);
 $("url-add").addEventListener("click", addUrlValue);
-let windowTimer;
-$("window-search").addEventListener("input", () => {
-  clearTimeout(windowTimer);
-  windowTimer = setTimeout(refreshWindow, 300);
-});
-$("window-rescan").addEventListener("click", refreshWindow);
 $("pick-dom").addEventListener("click", () => pickDom());
 let domSearchTimer;
 $("dom-search").addEventListener("input", () => {
@@ -2181,6 +2091,10 @@ $("layer").addEventListener("change", () => {
   readPage();
 });
 $("refresh").addEventListener("click", () => {
+  if ($("source").value === "window") {
+    refreshWindowTree();
+    return;
+  }
   state.raw = "";
   readPage();
 });

@@ -27,8 +27,7 @@ main {
 }
 #tree-pane,
 #dom-pane,
-#url-pane,
-#window-pane {
+#url-pane {
   flex: 1;
   overflow: auto;
   padding: 6px 8px;
@@ -174,17 +173,6 @@ summary,
   background: #8881;
   border-radius: 3px;
   word-break: break-word;
-}
-#window-search {
-  width: 100%;
-  box-sizing: border-box;
-}
-#window-results,
-#window-globals {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin: 6px 0;
 }
 #url-parts {
   display: flex;
