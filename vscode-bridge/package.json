@@ -1,0 +1,46 @@
+{
+  "name": "pixel-helper-bridge",
+  "displayName": "Pixel Helper Bridge",
+  "description": "Lets the Pixel Helper Chrome extension use GitHub Copilot through VS Code, on a local-only port.",
+  "version": "0.1.0",
+  "publisher": "local",
+  "private": true,
+  "license": "UNLICENSED",
+  "engines": {
+    "vscode": "^1.95.0"
+  },
+  "main": "./extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "extensionKind": [
+    "ui"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "pixelHelperBridge.copyToken",
+        "title": "Pixel Helper: Copy Bridge Token"
+      },
+      {
+        "command": "pixelHelperBridge.authorize",
+        "title": "Pixel Helper: Authorize Copilot"
+      }
+    ],
+    "configuration": {
+      "title": "Pixel Helper Bridge",
+      "properties": {
+        "pixelHelperBridge.port": {
+          "type": "number",
+          "default": 47821,
+          "description": "Local port (127.0.0.1) the Chrome extension connects to."
+        },
+        "pixelHelperBridge.model": {
+          "type": "string",
+          "default": "",
+          "description": "Copilot model family to prefer, for example gpt-4o. Empty uses the first available model."
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,247 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="panel.css" />
+  </head>
+  <body>
+    <header>
+      <label
+        >Source
+        <select id="source">
+          <option value="datalayer">dataLayer</option>
+          <option value="dom">DOM</option>
+          <option value="url">URL</option>
+          <option value="window">Window</option>
+        </select>
+      </label>
+      <label class="dl"
+        >Data layer <input id="layer" value="dataLayer" size="14"
+      /></label>
+      <input id="search" class="dl" placeholder="Search keys / values" />
+      <button id="refresh" class="dl">Refresh</button>
+      <span id="status" class="dl"></span>
+    </header>
+
+    <main>
+      <section id="tree-pane">
+        <div id="tree"></div>
+      </section>
+
+      <section id="dom-pane" class="hidden">
+        <input
+          id="dom-search"
+          placeholder="Search the page by text or attribute value"
+        />
+        <div id="dom-results"></div>
+        <p class="hint">
+          Click Select on page, then click the element on the page. You can also
+          use the element selected in the Elements panel.
+        </p>
+        <div class="pick-row">
+          <button id="select-dom" class="primary">Select on page</button>
+          <button id="pick-dom" class="link">Use Elements selection</button>
+        </div>
+        <div id="dom-status" class="hint"></div>
+        <div id="dom-candidates"></div>
+        <div id="dom-selected" class="hidden">
+          <label class="block"
+            >Selector <input id="dom-selector" class="mono"
+          /></label>
+          <div id="dom-count" class="hint"></div>
+          <label class="block"
+            >Read value from
+            <select id="dom-source"></select
+          ></label>
+          <label id="dom-all-label"
+            ><input type="checkbox" id="dom-all" /> All matches, as an array
+            (for several SKUs; pick a selector that matches every item)</label
+          >
+          <h3>Preview</h3>
+          <div id="dom-preview" class="mono"></div>
+          <button id="dom-add">Use value</button>
+        </div>
+      </section>
+
+      <section id="url-pane" class="hidden">
+        <p class="hint">
+          Click parts of this page's URL to add them. Each part can be split on
+          a separator (keeping one piece) and narrowed with a regex. Several
+          parts are joined together.
+        </p>
+        <h3>URL parts</h3>
+        <div id="url-parts"></div>
+        <h3>Value</h3>
+        <div id="url-items"></div>
+        <label class="block"
+          >Join with
+          <input
+            id="url-sep"
+            class="mono"
+            placeholder="separator (empty = none)"
+        /></label>
+        <h3>Preview</h3>
+        <div id="url-preview" class="mono"></div>
+        <button id="url-add">Use value</button>
+        <div id="url-status" class="hint"></div>
+      </section>
+
+      <section id="window-pane" class="hidden">
+        <p class="hint">
+          Search the page's custom global variables (window) by key or value,
+          for example a SKU or "price".
+        </p>
+        <input id="window-search" placeholder="Search keys or values" />
+        <div id="window-status" class="hint"></div>
+        <div id="window-results"></div>
+        <h3>
+          Custom globals <button id="window-rescan" class="link">Rescan</button>
+        </h3>
+        <p class="hint">Click one to browse it as the data layer.</p>
+        <div id="window-globals"></div>
+      </section>
+
+      <section id="config-pane">
+        <nav id="tabs">
+          <button class="tab active" data-tab="tab-pixel">Pixel</button>
+          <button class="tab" data-tab="tab-url">URL</button>
+          <button class="tab" data-tab="tab-ai">Copilot</button>
+        </nav>
+
+        <div id="tab-pixel">
+          <div class="grid">
+            <label
+              >Advertiser ID
+              <input id="advertiser" type="number" min="0" value="0"
+            /></label>
+            <label>
+              Type
+              <select id="type">
+                <option>scraper</option>
+                <option selected>viewed</option>
+                <option>basketed</option>
+                <option>purchased</option>
+                <option>attribution</option>
+                <option>conversion</option>
+              </select>
+            </label>
+            <label id="label-field"
+              >Label <input id="label" value="example"
+            /></label>
+          </div>
+
+          <div id="scrape-segment">
+            <h3>SKU expression</h3>
+            <input
+              id="sku"
+              class="mono"
+              placeholder="Click a value in the tree"
+            />
+          </div>
+
+          <div id="scrape-scraper">
+            <h3>Scrape fields</h3>
+            <div id="rows"></div>
+            <button id="add-row">Add row</button>
+          </div>
+
+          <div id="trigger-section" class="hidden">
+            <h3>Trigger</h3>
+            <label
+              ><input type="checkbox" id="trigger-on" /> Fire on click instead
+              of on scrape changes</label
+            >
+            <div id="trigger-fields" class="hidden">
+              <p class="hint">
+                Click Select on page, then click the button on the page. You can
+                also use the element selected in the Elements panel.
+              </p>
+              <div class="pick-row">
+                <button id="select-trigger" class="primary">
+                  Select on page
+                </button>
+                <button id="pick-trigger" class="link">
+                  Use Elements selection
+                </button>
+              </div>
+              <div id="trigger-candidates"></div>
+              <label class="block"
+                >Selector
+                <input
+                  id="trigger-elements"
+                  class="mono"
+                  placeholder="button.basket[data-sku]"
+              /></label>
+              <div id="trigger-count" class="hint"></div>
+            </div>
+          </div>
+
+          <h3>Output</h3>
+          <textarea id="output" class="mono" readonly></textarea>
+          <button id="copy">Copy</button>
+
+          <h3>Test</h3>
+          <button id="test">Test pixel</button>
+          <p class="hint">
+            Runs the pixel on this page with debug on, like loading it with
+            ?pixel_debug. This sends real requests; scrapers are validate-only.
+          </p>
+          <div id="test-result"></div>
+        </div>
+
+        <div id="tab-url" class="hidden">
+          <label class="block"
+            >URL pattern (regex source) <input id="url" class="mono"
+          /></label>
+          <h3>Site sections seen</h3>
+          <p class="hint">
+            Browse the site, then tick the sections to include.
+          </p>
+          <div id="saved"></div>
+          <button id="clear-saved">Clear list</button>
+        </div>
+        <div id="tab-ai" class="hidden">
+          <label class="block"
+            >What should Copilot build?
+            <textarea
+              id="ai-goal"
+              placeholder="e.g. A viewed pixel for product pages and a basketed pixel on the add to bag button"
+            ></textarea>
+          </label>
+          <p class="hint">
+            Copilot runs in VS Code in the background and fills this panel in.
+            The prompt includes the pixel rules, this page's URL and sections,
+            the data found by the pickers (trimmed), your current draft and the
+            last test result, so you can also use it to fix errors.
+          </p>
+          <div class="pick-row">
+            <button id="ai-build" class="primary">Build with Copilot</button>
+            <button id="ai-copy" class="link">Copy prompt</button>
+          </div>
+          <div id="ai-status" class="hint"></div>
+          <div id="ai-suggestions"></div>
+          <pre id="ai-stream" class="mono"></pre>
+          <details>
+            <summary>Connection to VS Code</summary>
+            <div class="grid">
+              <label>Port <input id="bridge-port" type="number" /></label>
+              <label
+                >Token
+                <input
+                  id="bridge-token"
+                  type="password"
+                  placeholder="Pixel Helper: Copy Bridge Token"
+              /></label>
+            </div>
+            <button id="bridge-check">Check connection</button>
+            <div id="bridge-status" class="hint"></div>
+          </details>
+          <h3>Prompt preview <span id="ai-length" class="hint"></span></h3>
+          <textarea id="ai-preview" class="mono" readonly></textarea>
+        </div>
+      </section>
+    </main>
+
+    <script src="panel.js"></script>
+  </body>
+</html>
